@@ -8,10 +8,12 @@ export class MainScene extends Phaser.Scene {
   private stones!: Phaser.GameObjects.Group;
   private campfires!: Phaser.GameObjects.Group;
 
+  // アクションボタンのイベントハンドラ
   private handleActionButton = () => {
     this.tryHarvestTree();
   };
 
+  // クラフトリクエストのイベントハンドラ
   private handleCraftRequest = () => {
     if (!this.player) return;
 
