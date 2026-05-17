@@ -2,31 +2,37 @@ import Phaser from 'phaser';
 
 class Tree extends Phaser.Physics.Arcade.Sprite {
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'dummy-tree');
-
-    // シーンの描画ツリーに追加
+    super(scene, x, y, 'tree-img');
     scene.add.existing(this);
+    
+    this.setScale(2.5);
+    this.setDepth(this.y); // 奥行き表現
 
-    // 物理エンジンに登録（第2引数 true で Static（静的）ボディになり、動かない壁になる）
-    scene.physics.add.existing(this, true);
+    // ★ 変更：物理ボディを一旦「動く(Dynamic)」として追加
+    scene.physics.add.existing(this); 
+    
+    if (this.body) {
+      const body = this.body as Phaser.Physics.Arcade.Body;
+      // ★ 追加：ぶつかっても押されない（動かない）ように固定する
+      body.setImmovable(true); 
+
+      // ★ 変更：当たり判定を「木の幹（根元）」だけに絞る
+      // 横幅は半分、高さは下から20%分だけの小さな箱にします
+      body.setSize(this.width * 0.5, this.height * 0.2);
+      // 当たり判定の位置を、画像の下の方にずらします
+      body.setOffset(this.width * 0.25, this.height * 0.8);
+    }
   }
 
-  /**
-   * 自身が伐採された時のエフェクトと消滅処理（カプセル化）
-   * @param onComplete 完全に消滅した後に実行したいコールバック（アイテム追加用など）
-   */
   harvest(onComplete: () => void) {
-    // すでに伐採アニメーション中の場合は重複処理を避ける
     if (this.scale === 0) return;
-
-    // MainSceneにあったアニメーションロジックをこちらにカプセル化
     this.scene.tweens.add({
       targets: this,
       scale: 0,
       duration: 200,
       onComplete: () => {
-        this.destroy(); // オブジェクトの破棄
-        onComplete();   // 完了通知
+        this.destroy();
+        onComplete();
       }
     });
   }

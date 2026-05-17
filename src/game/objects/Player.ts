@@ -13,30 +13,33 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     this.padInput = vector;
   };
 
-  // コンストラクタで初期設定（MainSceneからthisを渡して生成する）
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'dummy-player');
-
-    // シーンの描画ツリーと物理エンジンに自分自身を登録
+    super(scene, x, y, 'player-sprite');
     scene.add.existing(this);
     scene.physics.add.existing(this);
-    // ワールド境界との衝突を有効化
     this.setCollideWorldBounds(true);
+    
+    // 木や石と同じように少し大きくします
+    this.setScale(2.5);
 
-    // --- 入力のセットアップ ---
+    // ★ 追加：プレイヤーの当たり判定を「足元だけ」にする
+    if (this.body) {
+      // 48x48の画像の、下の方（16x16）だけを当たり判定にします
+      this.body.setSize(16, 16);
+      this.body.setOffset(16, 32); 
+    }
+
     this.setupInputs(scene);
   }
 
   private setupInputs(scene: Phaser.Scene) {
     GameEventBus.on(GAME_EVENTS.PLAYER_MOVE, this.handlePlayerMove);
-
     if (scene.input.keyboard) {
       this.cursors = scene.input.keyboard.createCursorKeys();
       this.wasdKeys = scene.input.keyboard.addKeys('W,A,S,D') as any;
     }
   }
 
-  // 毎フレームMainSceneから呼ばれる更新処理
   update() {
     this.keyboardInput = { x: 0, y: 0 };
     if (this.cursors && this.wasdKeys) {
@@ -57,12 +60,21 @@ class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.setVelocity(moveX * this.playerSpeed, moveY * this.playerSpeed);
 
-    if (moveX !== 0 || moveY !== 0) {
-      this.angle += 2;
+    // アニメーション制御
+    if (this.body && this.body.velocity.x < 0) {
+      this.anims.play('left', true);
+    } else if (this.body && this.body.velocity.x > 0) {
+      this.anims.play('right', true);
+    } else if (this.body && this.body.velocity.y !== 0) {
+      if (!this.anims.isPlaying) this.anims.play('turn'); 
+    } else {
+      this.anims.play('turn', true);
     }
+
+    // ★ 追加：移動するたびに自分の「奥行き(Z-Index)」を更新する
+    this.setDepth(this.y);
   }
 
-  // 破棄時のクリーンアップ処理
   destroy(fromScene?: boolean) {
     GameEventBus.off(GAME_EVENTS.PLAYER_MOVE, this.handlePlayerMove);
     super.destroy(fromScene);
