@@ -5,6 +5,9 @@ class Player extends Phaser.Physics.Arcade.Sprite {
   private padInput = { x: 0, y: 0 };
   private keyboardInput = { x: 0, y: 0 };
   private playerSpeed = 200;
+  
+  // ★ 追加：最後に歩いていた方向を記憶する
+  private lastDirection: 'down' | 'up' | 'side' = 'down';
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
   private wasdKeys!: { W: any, A: any, S: any, D: any } | undefined;
@@ -18,15 +21,13 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setCollideWorldBounds(true);
-    
-    // 木や石と同じように少し大きくします
+
+    this.setOrigin(0.5, 1.0);
     this.setScale(2.5);
 
-    // ★ 追加：プレイヤーの当たり判定を「足元だけ」にする
     if (this.body) {
-      // 48x48の画像の、下の方（16x16）だけを当たり判定にします
-      this.body.setSize(16, 16);
-      this.body.setOffset(16, 32); 
+      this.body.setSize(16, 12);
+      this.body.setOffset(16, 36); 
     }
 
     this.setupInputs(scene);
@@ -60,18 +61,26 @@ class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.setVelocity(moveX * this.playerSpeed, moveY * this.playerSpeed);
 
-    // アニメーション制御
-    if (this.body && this.body.velocity.x < 0) {
-      this.anims.play('left', true);
-    } else if (this.body && this.body.velocity.x > 0) {
-      this.anims.play('right', true);
-    } else if (this.body && this.body.velocity.y !== 0) {
-      if (!this.anims.isPlaying) this.anims.play('turn'); 
+    // ★ 完璧なアニメーション制御ロジック
+    if (moveX === 0 && moveY === 0) {
+      // 止まっている時は、最後に動いていた方向の待機画像を表示する
+      this.anims.play(`idle-${this.lastDirection}`, true);
     } else {
-      this.anims.play('turn', true);
+      if (moveX !== 0) {
+        this.lastDirection = 'side';
+        this.setFlipX(moveX < 0); // 左なら反転
+        this.anims.play('walk-side', true);
+      } else if (moveY < 0) {
+        this.lastDirection = 'up';
+        this.setFlipX(false);
+        this.anims.play('walk-up', true);
+      } else if (moveY > 0) {
+        this.lastDirection = 'down';
+        this.setFlipX(false);
+        this.anims.play('walk-down', true);
+      }
     }
 
-    // ★ 追加：移動するたびに自分の「奥行き(Z-Index)」を更新する
     this.setDepth(this.y);
   }
 

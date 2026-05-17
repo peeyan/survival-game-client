@@ -15,6 +15,7 @@ export const PhaserGame = () => {
       height: window.innerHeight,
       parent: 'phaser-container', // 対象のDOM ID
       scene: [MainScene],
+      pixelArt: true,
       scale: {
         mode: Phaser.Scale.RESIZE, // スマホの画面サイズ変更に自動追従
         autoCenter: Phaser.Scale.CENTER_BOTH,
