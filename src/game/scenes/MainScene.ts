@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { createNoise2D } from 'simplex-noise';
-import { Player, Tree, Stone, Campfire } from '../objects/index';
+import { Player, Tree, Stone, Campfire, Berry } from '../objects/index'; // ★ Berryを追加
 import { GameEventBus, GAME_EVENTS, gameState } from '../../logic/index';
 
 export class MainScene extends Phaser.Scene {
@@ -8,9 +8,10 @@ export class MainScene extends Phaser.Scene {
   private trees!: Phaser.GameObjects.Group;
   private stones!: Phaser.GameObjects.Group;
   private campfires!: Phaser.GameObjects.Group;
+  private berries!: Phaser.GameObjects.Group; // ★ 追加
   private waterTiles!: Phaser.Physics.Arcade.StaticGroup;
 
-  private handleActionButton = () => { this.tryHarvestTree(); };
+  private handleActionButton = () => { this.tryHarvest(); }; // ★ 名前を tryHarvest に変更
   private handleCraftRequest = () => {
     if (!this.player) return;
     if (gameState.canCraftCampfire()) {
@@ -42,6 +43,15 @@ export class MainScene extends Phaser.Scene {
     makeTile('tile-water', 0x4169E1);
     makeTile('tile-sand', 0xEEDD82); 
     makeTile('tile-grass', 0x228B22);
+
+    // ★ 追加：動的にベリーのテクスチャを生成 (16x16の赤い丸)
+    const graphics = this.add.graphics();
+    graphics.fillStyle(0xff0000, 1);
+    graphics.fillCircle(8, 8, 6);
+    graphics.lineStyle(2, 0x8b0000);
+    graphics.strokeCircle(8, 8, 6);
+    graphics.generateTexture('berry-img', 16, 16);
+    graphics.destroy();
   }
 
   create() {
@@ -63,6 +73,7 @@ export class MainScene extends Phaser.Scene {
     this.trees = this.add.group();
     this.stones = this.add.group();
     this.campfires = this.add.group();
+    this.berries = this.add.group(); // ★ 追加
     this.waterTiles = this.physics.add.staticGroup();
 
     // ==========================================
@@ -112,8 +123,14 @@ export class MainScene extends Phaser.Scene {
         if (isWater) {
           const waterBody = this.add.rectangle(x + tileSize/2, y + tileSize/2, tileSize, tileSize);
           this.waterTiles.add(waterBody);
-        } else if (isGrass && Math.random() < 0.15) {
-          this.trees.add(new Tree(this, x + tileSize/2, y + tileSize/2));
+        } else if (isGrass) {
+          // ★ 追加：草地の上に木またはベリーを配置するロジック
+          const r = Math.random();
+          if (r < 0.15) { // 15%で木
+            this.trees.add(new Tree(this, x + tileSize/2, y + tileSize/2));
+          } else if (r < 0.17) { // 2% (0.15~0.17) の確率でベリー
+            this.berries.add(new Berry(this, x + tileSize/2, y + tileSize/2));
+          }
         } else if (isSand && Math.random() < 0.05) {
           this.stones.add(new Stone(this, x + tileSize/2, y + tileSize/2));
         }
@@ -125,6 +142,7 @@ export class MainScene extends Phaser.Scene {
 
     this.physics.add.collider(this.player, this.trees);
     this.physics.add.collider(this.player, this.stones);
+    this.physics.add.collider(this.player, this.berries); // ★ 追加：ベリーの当たり判定
     this.physics.add.collider(this.player, this.waterTiles);
 
     this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
@@ -134,15 +152,33 @@ export class MainScene extends Phaser.Scene {
     GameEventBus.on(GAME_EVENTS.CRAFT_REQUEST, this.handleCraftRequest);
     if (this.input.keyboard) this.input.keyboard.on('keydown-SPACE', this.handleActionButton);
 
+    // ★ 追加：2秒ごとに空腹度を1減らすタイマー
+    this.time.addEvent({
+      delay: 2000,
+      callback: () => {
+        gameState.consumeHunger(1);
+      },
+      loop: true
+    });
+
     this.events.once('destroy', () => {
       GameEventBus.off(GAME_EVENTS.ACTION_BUTTON, this.handleActionButton);
       GameEventBus.off(GAME_EVENTS.CRAFT_REQUEST, this.handleCraftRequest);
     });
   }
 
-  private tryHarvestTree() {
+  // ★ 汎用的に採取処理を行うようにリネームし、ベリーの処理を追加
+  private tryHarvest() {
     if (!this.player) return;
     const range = 60; 
+
+    // ベリーが近くにあれば優先して食べる
+    const nearbyBerries = this.berries.getChildren().filter((b) => Phaser.Math.Distance.Between(this.player.x, this.player.y, (b as Berry).x, (b as Berry).y) < range) as Berry[];
+    if (nearbyBerries.length > 0) {
+      nearbyBerries[0].harvest(() => gameState.eatFood(20));
+      return;
+    }
+
     const nearbyTrees = this.trees.getChildren().filter((t) => Phaser.Math.Distance.Between(this.player.x, this.player.y, (t as Tree).x, (t as Tree).y) < range) as Tree[];
     if (nearbyTrees.length > 0) {
       nearbyTrees[0].harvest(() => gameState.addWood(1));

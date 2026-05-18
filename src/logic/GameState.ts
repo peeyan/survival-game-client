@@ -7,6 +7,10 @@ class GameState {
     stone: 0,
   };
 
+  // ★ 追加：空腹度の状態管理
+  public hunger = 100;
+  public maxHunger = 100;
+
   // 木材を追加するメソッド
   addWood(amount: number) {
     this.inventory.wood += amount;
@@ -29,6 +33,18 @@ class GameState {
       return true;
     }
     return false;
+  }
+
+  // ★ 追加：空腹度を減らす
+  consumeHunger(amount: number) {
+    this.hunger = Math.max(0, this.hunger - amount);
+    GameEventBus.emit(GAME_EVENTS.HUNGER_UPDATED, this.hunger);
+  }
+
+  // ★ 追加：食料を食べて回復する
+  eatFood(amount: number) {
+    this.hunger = Math.min(this.maxHunger, this.hunger + amount);
+    GameEventBus.emit(GAME_EVENTS.HUNGER_UPDATED, this.hunger);
   }
 }
 
