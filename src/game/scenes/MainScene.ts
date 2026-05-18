@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { createNoise2D } from 'simplex-noise';
-import { Player, Tree, Stone, Campfire, Berry } from '../objects/index'; // ★ Berryを追加
+import { Player, Tree, Stone, Campfire, Berry } from '../objects/index';
 import { GameEventBus, GAME_EVENTS, gameState } from '../../logic/index';
 
 export class MainScene extends Phaser.Scene {
@@ -8,10 +8,13 @@ export class MainScene extends Phaser.Scene {
   private trees!: Phaser.GameObjects.Group;
   private stones!: Phaser.GameObjects.Group;
   private campfires!: Phaser.GameObjects.Group;
-  private berries!: Phaser.GameObjects.Group; // ★ 追加
+  private berries!: Phaser.GameObjects.Group;
   private waterTiles!: Phaser.Physics.Arcade.StaticGroup;
+  
+  // ★ 追加：暗闇描画用のレイヤー
+  private darkness!: Phaser.GameObjects.RenderTexture;
 
-  private handleActionButton = () => { this.tryHarvest(); }; // ★ 名前を tryHarvest に変更
+  private handleActionButton = () => { this.tryHarvest(); };
   private handleCraftRequest = () => {
     if (!this.player) return;
     if (gameState.canCraftCampfire()) {
@@ -44,7 +47,6 @@ export class MainScene extends Phaser.Scene {
     makeTile('tile-sand', 0xEEDD82); 
     makeTile('tile-grass', 0x228B22);
 
-    // ★ 追加：動的にベリーのテクスチャを生成 (16x16の赤い丸)
     const graphics = this.add.graphics();
     graphics.fillStyle(0xff0000, 1);
     graphics.fillCircle(8, 8, 6);
@@ -62,7 +64,6 @@ export class MainScene extends Phaser.Scene {
     this.anims.create({ key: 'idle-side', frames: [{ key: 'player-sprite', frame: 6 }], frameRate: 10 });
     this.anims.create({ key: 'idle-up', frames: [{ key: 'player-sprite', frame: 12 }], frameRate: 10 });
 
-    // ★ 冒険の舞台を少し広くしました
     const worldWidth = 4000;
     const worldHeight = 4000;
     const tileSize = 64;
@@ -70,50 +71,52 @@ export class MainScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
     this.cameras.main.setBackgroundColor('#4169E1');
 
+    // ★ 追加：光源を表現するためのフワッとした丸いマスク画像を生成
+    const maskGraphics = this.add.graphics();
+    // 半径100pxの中に、透明度を変えながら何重にも円を描いてグラデーションを作る
+    for (let r = 100; r > 0; r -= 5) {
+      maskGraphics.fillStyle(0xffffff, 0.05);
+      maskGraphics.fillCircle(100, 100, r);
+    }
+    maskGraphics.generateTexture('light-mask', 200, 200);
+    maskGraphics.destroy();
+
+    // ★ 追加：画面全体を覆う暗闇のRenderTexture
+    this.darkness = this.add.renderTexture(0, 0, this.cameras.main.width, this.cameras.main.height);
+    this.darkness.setScrollFactor(0); // カメラの動きに合わせて画面に固定
+    this.darkness.setDepth(9999);     // 全てのオブジェクトより手前に描画する
+
     this.trees = this.add.group();
     this.stones = this.add.group();
     this.campfires = this.add.group();
-    this.berries = this.add.group(); // ★ 追加
+    this.berries = this.add.group();
     this.waterTiles = this.physics.add.staticGroup();
 
-    // ==========================================
-    // ★ 改良版・地形生成（フラクタルノイズ合成）
-    // ==========================================
     const noise2D = createNoise2D();
 
     for (let y = 0; y < worldHeight; y += tileSize) {
       for (let x = 0; x < worldWidth; x += tileSize) {
-        
-        // 1. ベースの大陸を作る「巨大で緩やかな波」（0.0005）
         const baseNoise = noise2D(x * 0.0005, y * 0.0005); 
-        
-        // 2. 海岸線のリアリティや小島を作る「細かくて弱い波」（0.003の波を半分の強さ0.5で足す）
         const detailNoise = noise2D(x * 0.003, y * 0.003) * 0.5;
-
-        // ノイズを合成
         let noiseValue = baseNoise + detailNoise;
 
-        // 3. 島補正（マップ端に行くほど強制的に海に沈める）
         const distanceToCenter = Phaser.Math.Distance.Between(x, y, worldWidth / 2, worldHeight / 2);
         const maxDistance = worldWidth / 2;
         const edgeFalloff = Math.max(0, distanceToCenter / maxDistance); 
         
-        // 端に近づくほど標高を削る（1.3倍の強さで沈める）
         noiseValue -= (edgeFalloff * 1.3); 
 
-        // 4. 地形の判定
         let tileKey = '';
         let isWater = false, isSand = false, isGrass = false;
 
-        // ★ 標高のしきい値を調整
         if (noiseValue < -0.1) {
-          tileKey = 'tile-water'; // 海
+          tileKey = 'tile-water';
           isWater = true;
         } else if (noiseValue < 0.2) {
-          tileKey = 'tile-sand';  // 砂浜（少し広め）
+          tileKey = 'tile-sand';
           isSand = true;
         } else {
-          tileKey = 'tile-grass'; // 森
+          tileKey = 'tile-grass';
           isGrass = true;
         }
 
@@ -124,11 +127,10 @@ export class MainScene extends Phaser.Scene {
           const waterBody = this.add.rectangle(x + tileSize/2, y + tileSize/2, tileSize, tileSize);
           this.waterTiles.add(waterBody);
         } else if (isGrass) {
-          // ★ 追加：草地の上に木またはベリーを配置するロジック
           const r = Math.random();
-          if (r < 0.15) { // 15%で木
+          if (r < 0.15) {
             this.trees.add(new Tree(this, x + tileSize/2, y + tileSize/2));
-          } else if (r < 0.17) { // 2% (0.15~0.17) の確率でベリー
+          } else if (r < 0.17) {
             this.berries.add(new Berry(this, x + tileSize/2, y + tileSize/2));
           }
         } else if (isSand && Math.random() < 0.05) {
@@ -136,13 +138,12 @@ export class MainScene extends Phaser.Scene {
         }
       }
     }
-    // ==========================================
 
     this.player = new Player(this, worldWidth / 2, worldHeight / 2);
 
     this.physics.add.collider(this.player, this.trees);
     this.physics.add.collider(this.player, this.stones);
-    this.physics.add.collider(this.player, this.berries); // ★ 追加：ベリーの当たり判定
+    this.physics.add.collider(this.player, this.berries);
     this.physics.add.collider(this.player, this.waterTiles);
 
     this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
@@ -152,12 +153,17 @@ export class MainScene extends Phaser.Scene {
     GameEventBus.on(GAME_EVENTS.CRAFT_REQUEST, this.handleCraftRequest);
     if (this.input.keyboard) this.input.keyboard.on('keydown-SPACE', this.handleActionButton);
 
-    // ★ 追加：2秒ごとに空腹度を1減らすタイマー
+    // 空腹度を減らすタイマー
     this.time.addEvent({
       delay: 2000,
-      callback: () => {
-        gameState.consumeHunger(1);
-      },
+      callback: () => { gameState.consumeHunger(1); },
+      loop: true
+    });
+
+    // ★ 追加：現実の1秒(1000ms)で、ゲーム内の10分を進めるタイマー
+    this.time.addEvent({
+      delay: 1000,
+      callback: () => { gameState.advanceTime(10); },
       loop: true
     });
 
@@ -167,12 +173,10 @@ export class MainScene extends Phaser.Scene {
     });
   }
 
-  // ★ 汎用的に採取処理を行うようにリネームし、ベリーの処理を追加
   private tryHarvest() {
     if (!this.player) return;
     const range = 60; 
 
-    // ベリーが近くにあれば優先して食べる
     const nearbyBerries = this.berries.getChildren().filter((b) => Phaser.Math.Distance.Between(this.player.x, this.player.y, (b as Berry).x, (b as Berry).y) < range) as Berry[];
     if (nearbyBerries.length > 0) {
       nearbyBerries[0].harvest(() => gameState.eatFood(20));
@@ -192,5 +196,44 @@ export class MainScene extends Phaser.Scene {
 
   update() {
     if (this.player) this.player.update();
+
+    // ★ 追加：リサイズ対応（ウィンドウサイズが変わったら暗闇のサイズも合わせる）
+    if (this.darkness.width !== this.cameras.main.width || this.darkness.height !== this.cameras.main.height) {
+      this.darkness.resize(this.cameras.main.width, this.cameras.main.height);
+    }
+
+    // ★ 追加：昼夜と光源の描画更新
+    this.darkness.clear();
+    
+    // 現在の時間を「12.5」のような小数に変換して計算しやすくする
+    const fHour = gameState.time.hour + gameState.time.minute / 60.0;
+    let alpha = 0;
+
+    // 時刻に応じた暗さの計算
+    if (fHour >= 17 && fHour <= 18) {
+      // 17:00 〜 18:00 (徐々に暗くなる)
+      alpha = 0.85 * (fHour - 17);
+    } else if (fHour > 18 || fHour < 5) {
+      // 18:00 〜 翌5:00 (夜：真っ暗)
+      alpha = 0.85;
+    } else if (fHour >= 5 && fHour <= 6) {
+      // 5:00 〜 6:00 (徐々に明るくなる)
+      alpha = 0.85 * (1 - (fHour - 5));
+    }
+
+    if (alpha > 0) {
+      // 暗闇で画面を塗りつぶす
+      this.darkness.fill(0x000000, alpha);
+      
+      // 焚き火の周りだけ「ERASE」ブレンドモードを使ってくり抜く
+      this.campfires.getChildren().forEach((cf: any) => {
+        // オブジェクトのワールド座標からカメラ座標を引いて、画面上の位置を計算
+        const cx = cf.x - this.cameras.main.worldView.x;
+        const cy = cf.y - this.cameras.main.worldView.y;
+        
+        // テクスチャの中心(100,100)を合わせるために -100 している
+        this.darkness.erase('light-mask', cx - 100, cy - 100);
+      });
+    }
   }
 }

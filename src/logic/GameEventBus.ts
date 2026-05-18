@@ -10,4 +10,5 @@ export const GAME_EVENTS = {
   CRAFT_REQUEST: 'craft_request',
   CRAFT_SUCCESS: 'craft_success',
   HUNGER_UPDATED: 'hunger_updated',
+  TIME_UPDATED: 'time_updated',
 };

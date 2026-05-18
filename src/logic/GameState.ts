@@ -7,9 +7,17 @@ class GameState {
     stone: 0,
   };
 
-  // ★ 追加：空腹度の状態管理
+  // 空腹度の状態管理
   public hunger = 100;
   public maxHunger = 100;
+
+  // ★ 追加：時間の状態管理（初期値は1日目の12:00）
+  public totalMinutes = 12 * 60; 
+  public time = {
+    day: 1,
+    hour: 12,
+    minute: 0
+  };
 
   // 木材を追加するメソッド
   addWood(amount: number) {
@@ -24,7 +32,7 @@ class GameState {
 
   canCraftCampfire(): boolean {
     const cost = { wood: 3, stone: 3 };
-      if (this.inventory.wood >= cost.wood && this.inventory.stone >= cost.stone) {
+    if (this.inventory.wood >= cost.wood && this.inventory.stone >= cost.stone) {
       // 素材を消費
       this.inventory.wood -= cost.wood;
       this.inventory.stone -= cost.stone;
@@ -35,16 +43,26 @@ class GameState {
     return false;
   }
 
-  // ★ 追加：空腹度を減らす
+  // 空腹度を減らす
   consumeHunger(amount: number) {
     this.hunger = Math.max(0, this.hunger - amount);
     GameEventBus.emit(GAME_EVENTS.HUNGER_UPDATED, this.hunger);
   }
 
-  // ★ 追加：食料を食べて回復する
+  // 食料を食べて回復する
   eatFood(amount: number) {
     this.hunger = Math.min(this.maxHunger, this.hunger + amount);
     GameEventBus.emit(GAME_EVENTS.HUNGER_UPDATED, this.hunger);
+  }
+
+  // ★ 追加：時間を進める
+  advanceTime(mins: number) {
+    this.totalMinutes += mins;
+    this.time.day = Math.floor(this.totalMinutes / (24 * 60)) + 1;
+    this.time.hour = Math.floor((this.totalMinutes % (24 * 60)) / 60);
+    this.time.minute = this.totalMinutes % 60;
+    
+    GameEventBus.emit(GAME_EVENTS.TIME_UPDATED, this.time);
   }
 }
 
