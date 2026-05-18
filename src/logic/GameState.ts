@@ -11,12 +11,12 @@ class GameState {
   public hunger = 100;
   public maxHunger = 100;
 
-  // ★ 追加：時間の状態管理（初期値は1日目の12:00）
-  public totalMinutes = 12 * 60; 
+  // 時間の状態管理（初期値は1日目の16:30に変更して夕暮れをすぐテストできるようにする）
+  public totalMinutes = 16 * 60 + 30; 
   public time = {
     day: 1,
-    hour: 12,
-    minute: 0
+    hour: 16,
+    minute: 30
   };
 
   // 木材を追加するメソッド
@@ -55,7 +55,7 @@ class GameState {
     GameEventBus.emit(GAME_EVENTS.HUNGER_UPDATED, this.hunger);
   }
 
-  // ★ 追加：時間を進める
+  // 時間を進める
   advanceTime(mins: number) {
     this.totalMinutes += mins;
     this.time.day = Math.floor(this.totalMinutes / (24 * 60)) + 1;

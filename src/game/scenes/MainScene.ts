@@ -11,7 +11,7 @@ export class MainScene extends Phaser.Scene {
   private berries!: Phaser.GameObjects.Group;
   private waterTiles!: Phaser.Physics.Arcade.StaticGroup;
   
-  // ★ 追加：暗闇描画用のレイヤー
+  // 暗闇描画用のレイヤー
   private darkness!: Phaser.GameObjects.RenderTexture;
 
   private handleActionButton = () => { this.tryHarvest(); };
@@ -71,9 +71,8 @@ export class MainScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
     this.cameras.main.setBackgroundColor('#4169E1');
 
-    // ★ 追加：光源を表現するためのフワッとした丸いマスク画像を生成
+    // 光源を表現するためのフワッとした丸いマスク画像を生成
     const maskGraphics = this.add.graphics();
-    // 半径100pxの中に、透明度を変えながら何重にも円を描いてグラデーションを作る
     for (let r = 100; r > 0; r -= 5) {
       maskGraphics.fillStyle(0xffffff, 0.05);
       maskGraphics.fillCircle(100, 100, r);
@@ -81,7 +80,7 @@ export class MainScene extends Phaser.Scene {
     maskGraphics.generateTexture('light-mask', 200, 200);
     maskGraphics.destroy();
 
-    // ★ 追加：画面全体を覆う暗闇のRenderTexture
+    // 画面全体を覆う暗闇のRenderTexture
     this.darkness = this.add.renderTexture(0, 0, this.cameras.main.width, this.cameras.main.height);
     this.darkness.setScrollFactor(0); // カメラの動きに合わせて画面に固定
     this.darkness.setDepth(9999);     // 全てのオブジェクトより手前に描画する
@@ -96,6 +95,7 @@ export class MainScene extends Phaser.Scene {
 
     for (let y = 0; y < worldHeight; y += tileSize) {
       for (let x = 0; x < worldWidth; x += tileSize) {
+        
         const baseNoise = noise2D(x * 0.0005, y * 0.0005); 
         const detailNoise = noise2D(x * 0.003, y * 0.003) * 0.5;
         let noiseValue = baseNoise + detailNoise;
@@ -160,7 +160,7 @@ export class MainScene extends Phaser.Scene {
       loop: true
     });
 
-    // ★ 追加：現実の1秒(1000ms)で、ゲーム内の10分を進めるタイマー
+    // 現実の1秒(1000ms)で、ゲーム内の10分を進めるタイマー
     this.time.addEvent({
       delay: 1000,
       callback: () => { gameState.advanceTime(10); },
@@ -197,41 +197,34 @@ export class MainScene extends Phaser.Scene {
   update() {
     if (this.player) this.player.update();
 
-    // ★ 追加：リサイズ対応（ウィンドウサイズが変わったら暗闇のサイズも合わせる）
     if (this.darkness.width !== this.cameras.main.width || this.darkness.height !== this.cameras.main.height) {
       this.darkness.resize(this.cameras.main.width, this.cameras.main.height);
     }
 
-    // ★ 追加：昼夜と光源の描画更新
-    this.darkness.clear();
-    
-    // 現在の時間を「12.5」のような小数に変換して計算しやすくする
     const fHour = gameState.time.hour + gameState.time.minute / 60.0;
     let alpha = 0;
 
-    // 時刻に応じた暗さの計算
+    // 時刻に応じた暗さの計算 (夜の最大値を 0.9 に設定)
     if (fHour >= 17 && fHour <= 18) {
-      // 17:00 〜 18:00 (徐々に暗くなる)
-      alpha = 0.85 * (fHour - 17);
+      alpha = 0.9 * (fHour - 17);
     } else if (fHour > 18 || fHour < 5) {
-      // 18:00 〜 翌5:00 (夜：真っ暗)
-      alpha = 0.85;
+      alpha = 0.9;
     } else if (fHour >= 5 && fHour <= 6) {
-      // 5:00 〜 6:00 (徐々に明るくなる)
-      alpha = 0.85 * (1 - (fHour - 5));
+      alpha = 0.9 * (1 - (fHour - 5));
     }
 
-    if (alpha > 0) {
-      // 暗闇で画面を塗りつぶす
-      this.darkness.fill(0x000000, alpha);
+    // パフォーマンスと描画バグ回避のため、昼間は完全に描画スキップ、夜間はAlpha設定＋100%塗りつぶしで対応
+    if (alpha <= 0) {
+      this.darkness.setVisible(false);
+    } else {
+      this.darkness.setVisible(true);
+      this.darkness.setAlpha(alpha);
+      this.darkness.clear();
+      this.darkness.fill(0x000000, 1);
       
-      // 焚き火の周りだけ「ERASE」ブレンドモードを使ってくり抜く
       this.campfires.getChildren().forEach((cf: any) => {
-        // オブジェクトのワールド座標からカメラ座標を引いて、画面上の位置を計算
         const cx = cf.x - this.cameras.main.worldView.x;
         const cy = cf.y - this.cameras.main.worldView.y;
-        
-        // テクスチャの中心(100,100)を合わせるために -100 している
         this.darkness.erase('light-mask', cx - 100, cy - 100);
       });
     }
