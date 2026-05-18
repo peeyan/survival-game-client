@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { createNoise2D } from 'simplex-noise';
 import { Player, Tree, Stone, Campfire } from '../objects/index';
 import { GameEventBus, GAME_EVENTS, gameState } from '../../logic/index';
 
@@ -7,6 +8,7 @@ export class MainScene extends Phaser.Scene {
   private trees!: Phaser.GameObjects.Group;
   private stones!: Phaser.GameObjects.Group;
   private campfires!: Phaser.GameObjects.Group;
+  private waterTiles!: Phaser.Physics.Arcade.StaticGroup;
 
   private handleActionButton = () => { this.tryHarvestTree(); };
   private handleCraftRequest = () => {
@@ -22,70 +24,108 @@ export class MainScene extends Phaser.Scene {
   }
 
   preload() {
-    this.load.spritesheet('player-sprite', '/assets/player.png', {
-      frameWidth: 48,
-      frameHeight: 48
-    });
-
+    this.load.spritesheet('player-sprite', '/assets/player.png', { frameWidth: 48, frameHeight: 48 });
     this.load.image('tree-img', '/assets/tree.png');
     this.load.image('stone-img', '/assets/stone.png');
     this.load.image('campfire-img', '/assets/campfire.png');
+
+    const makeTile = (key: string, color: number) => {
+      const g = this.add.graphics();
+      g.fillStyle(color, 1);
+      g.fillRect(0, 0, 64, 64);
+      g.lineStyle(2, 0x000000, 0.05);
+      g.strokeRect(0, 0, 64, 64);
+      g.generateTexture(key, 64, 64);
+      g.destroy();
+    };
+
+    makeTile('tile-water', 0x4169E1);
+    makeTile('tile-sand', 0xEEDD82); 
+    makeTile('tile-grass', 0x228B22);
   }
 
   create() {
-    // ★ 画像（横6コマ）に合わせた完璧なアニメーション設定
-
-    // 下歩き (1行目: 0~5コマ目)
-    this.anims.create({
-      key: 'walk-down',
-      frames: this.anims.generateFrameNumbers('player-sprite', { start: 0, end: 5 }),
-      frameRate: 10,
-      repeat: -1
-    });
-
-    // 横歩き (2行目: 6~11コマ目)
-    this.anims.create({
-      key: 'walk-side',
-      frames: this.anims.generateFrameNumbers('player-sprite', { start: 6, end: 11 }),
-      frameRate: 10,
-      repeat: -1
-    });
-
-    // 上歩き (3行目: 12~17コマ目)
-    this.anims.create({
-      key: 'walk-up',
-      frames: this.anims.generateFrameNumbers('player-sprite', { start: 12, end: 17 }),
-      frameRate: 10,
-      repeat: -1
-    });
-
-    // 止まった時の待機ポーズ（各行の最初の1コマだけを指定）
+    this.anims.create({ key: 'walk-down', frames: this.anims.generateFrameNumbers('player-sprite', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+    this.anims.create({ key: 'walk-side', frames: this.anims.generateFrameNumbers('player-sprite', { start: 6, end: 11 }), frameRate: 10, repeat: -1 });
+    this.anims.create({ key: 'walk-up', frames: this.anims.generateFrameNumbers('player-sprite', { start: 12, end: 17 }), frameRate: 10, repeat: -1 });
     this.anims.create({ key: 'idle-down', frames: [{ key: 'player-sprite', frame: 0 }], frameRate: 10 });
     this.anims.create({ key: 'idle-side', frames: [{ key: 'player-sprite', frame: 6 }], frameRate: 10 });
     this.anims.create({ key: 'idle-up', frames: [{ key: 'player-sprite', frame: 12 }], frameRate: 10 });
 
-    const worldWidth = 2000;
-    const worldHeight = 2000;
-    this.cameras.main.setBackgroundColor('#2E8B57');
+    // ★ 冒険の舞台を少し広くしました
+    const worldWidth = 4000;
+    const worldHeight = 4000;
+    const tileSize = 64;
+    
     this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
-
-    this.add.grid(worldWidth / 2, worldHeight / 2, worldWidth, worldHeight, 64, 64, 0x228B22, 1, 0x006400, 0.5);
+    this.cameras.main.setBackgroundColor('#4169E1');
 
     this.trees = this.add.group();
     this.stones = this.add.group();
     this.campfires = this.add.group();
+    this.waterTiles = this.physics.add.staticGroup();
 
-    for (let i = 0; i < 50; i++) {
-      this.trees.add(new Tree(this, Phaser.Math.Between(100, worldWidth - 100), Phaser.Math.Between(100, worldHeight - 100)));
+    // ==========================================
+    // ★ 改良版・地形生成（フラクタルノイズ合成）
+    // ==========================================
+    const noise2D = createNoise2D();
+
+    for (let y = 0; y < worldHeight; y += tileSize) {
+      for (let x = 0; x < worldWidth; x += tileSize) {
+        
+        // 1. ベースの大陸を作る「巨大で緩やかな波」（0.0005）
+        const baseNoise = noise2D(x * 0.0005, y * 0.0005); 
+        
+        // 2. 海岸線のリアリティや小島を作る「細かくて弱い波」（0.003の波を半分の強さ0.5で足す）
+        const detailNoise = noise2D(x * 0.003, y * 0.003) * 0.5;
+
+        // ノイズを合成
+        let noiseValue = baseNoise + detailNoise;
+
+        // 3. 島補正（マップ端に行くほど強制的に海に沈める）
+        const distanceToCenter = Phaser.Math.Distance.Between(x, y, worldWidth / 2, worldHeight / 2);
+        const maxDistance = worldWidth / 2;
+        const edgeFalloff = Math.max(0, distanceToCenter / maxDistance); 
+        
+        // 端に近づくほど標高を削る（1.3倍の強さで沈める）
+        noiseValue -= (edgeFalloff * 1.3); 
+
+        // 4. 地形の判定
+        let tileKey = '';
+        let isWater = false, isSand = false, isGrass = false;
+
+        // ★ 標高のしきい値を調整
+        if (noiseValue < -0.1) {
+          tileKey = 'tile-water'; // 海
+          isWater = true;
+        } else if (noiseValue < 0.2) {
+          tileKey = 'tile-sand';  // 砂浜（少し広め）
+          isSand = true;
+        } else {
+          tileKey = 'tile-grass'; // 森
+          isGrass = true;
+        }
+
+        const tile = this.add.image(x + tileSize/2, y + tileSize/2, tileKey);
+        tile.setDepth(-1000);
+
+        if (isWater) {
+          const waterBody = this.add.rectangle(x + tileSize/2, y + tileSize/2, tileSize, tileSize);
+          this.waterTiles.add(waterBody);
+        } else if (isGrass && Math.random() < 0.15) {
+          this.trees.add(new Tree(this, x + tileSize/2, y + tileSize/2));
+        } else if (isSand && Math.random() < 0.05) {
+          this.stones.add(new Stone(this, x + tileSize/2, y + tileSize/2));
+        }
+      }
     }
-    for (let i = 0; i < 30; i++) {
-      this.stones.add(new Stone(this, Phaser.Math.Between(100, worldWidth - 100), Phaser.Math.Between(100, worldHeight - 100)));
-    }
+    // ==========================================
 
     this.player = new Player(this, worldWidth / 2, worldHeight / 2);
 
     this.physics.add.collider(this.player, this.trees);
     this.physics.add.collider(this.player, this.stones);
+    this.physics.add.collider(this.player, this.waterTiles);
 
     this.cameras.main.setBounds(0, 0, worldWidth, worldHeight);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
