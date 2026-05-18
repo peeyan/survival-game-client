@@ -9,15 +9,15 @@ class Tree extends Phaser.Physics.Arcade.Sprite {
     this.setScale(2.5);
     this.setDepth(this.y); // 奥行き表現
 
-    // ★ 変更：物理ボディを一旦「動く(Dynamic)」として追加
+    // 物理ボディを一旦「動く(Dynamic)」として追加
     scene.physics.add.existing(this);
 
     if (this.body) {
       const body = this.body as Phaser.Physics.Arcade.Body;
-      // ★ 追加：ぶつかっても押されない（動かない）ように固定する
+      // ぶつかっても押されない（動かない）ように固定する
       body.setImmovable(true);
 
-      // ★ 変更：当たり判定を「木の幹（根元）」だけに絞る
+      // 当たり判定を「木の幹（根元）」だけに絞る
       // 横幅は半分、高さは下から20%分だけの小さな箱にします
       body.setSize(this.width * 0.5, this.height * 0.2);
       // 当たり判定の位置を、画像の下の方にずらします
