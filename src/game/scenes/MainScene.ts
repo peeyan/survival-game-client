@@ -82,6 +82,7 @@ export class MainScene extends Phaser.Scene {
 
     // 画面全体を覆う暗闇のRenderTexture
     this.darkness = this.add.renderTexture(0, 0, this.cameras.main.width, this.cameras.main.height);
+    this.darkness.setOrigin(0, 0);
     this.darkness.setScrollFactor(0); // カメラの動きに合わせて画面に固定
     this.darkness.setDepth(9999);     // 全てのオブジェクトより手前に描画する
 
@@ -223,8 +224,8 @@ export class MainScene extends Phaser.Scene {
       this.darkness.fill(0x000000, 1);
       
       this.campfires.getChildren().forEach((cf: any) => {
-        const cx = cf.x - this.cameras.main.worldView.x;
-        const cy = cf.y - this.cameras.main.worldView.y;
+        const cx = cf.x - this.cameras.main.scrollX;
+        const cy = cf.y - this.cameras.main.scrollY;
         this.darkness.erase('light-mask', cx - 100, cy - 100);
       });
     }
