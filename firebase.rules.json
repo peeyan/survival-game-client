@@ -1,0 +1,41 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".validate": "$roomId.matches(/^[A-Z2-9]{6}$/)",
+
+        ".read": true,
+
+        "meta": {
+          ".write": "!data.exists()",
+          ".validate": "newData.hasChildren(['seed','hostId','status','createdAt']) && newData.child('seed').isNumber() && newData.child('hostId').isString() && newData.child('hostId').val().length <= 16 && newData.child('createdAt').val() >= (now - 5000) && newData.child('createdAt').val() <= (now + 5000)"
+        },
+
+        "players": {
+          "$playerId": {
+            ".validate": "$playerId.matches(/^[a-z0-9]{8}$/)",
+            ".write": true,
+            ".validate": "newData.hasChildren(['x','y','h']) && newData.child('x').isNumber() && newData.child('x').val() >= 0 && newData.child('x').val() <= 20000 && newData.child('y').isNumber() && newData.child('y').val() >= 0 && newData.child('y').val() <= 20000 && newData.child('h').isNumber() && newData.child('h').val() >= 0 && newData.child('h').val() <= 100"
+          }
+        },
+
+        "sharedInventory": {
+          ".write": true,
+          ".validate": "newData.hasChildren(['wood','stone'])"
+        },
+
+        "worldEvents": {
+          "$eventId": {
+            ".write": "!data.exists()",
+            ".validate": "newData.hasChildren(['type','senderId','timestamp']) && newData.child('type').val().matches(/^(animal_killed|loot_taken|berry_harvested|seaweed_harvested)$/) && newData.child('timestamp').val() >= (now - 10000)"
+          }
+        },
+
+        "gameState": {
+          ".write": true,
+          ".validate": "newData.hasChildren(['weather','tideLevel','totalMinutes'])"
+        }
+      }
+    }
+  }
+}

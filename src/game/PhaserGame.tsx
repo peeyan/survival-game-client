@@ -23,7 +23,7 @@ export const PhaserGame = () => {
       physics: {
         default: 'arcade',
         arcade: {
-          debug: true, // 開発中はtrueにしておくと当たり判定が見えて便利です
+          debug: false, // 開発中はtrueにしておくと当たり判定が見えて便利です
           gravity: { x: 0, y: 0 } // トップダウンビューなので重力はゼロ
         }
       },
